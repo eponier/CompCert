@@ -431,13 +431,24 @@ let pp_val fmt v =
   | Vsingle _ -> Format.fprintf fmt "<float32>"
   | Vptr _ -> Format.fprintf fmt "<vptr>"
 
-let pp_regs fmt regset =
+let pp_iregs fmt regset =
   let regs = Asm.[RAX; RBX; RCX; RDX; RSI; RDI; RBP; RSP; R8; R9; R10; R11; R12; R13; R14; R15] in
   Format.fprintf fmt "@[<h>%a@]"
     (Format.pp_print_list ~pp_sep:Format.pp_print_space
       (fun fmt r ->
         let v = regset (Asm.IR r) in
         Format.fprintf fmt "[%a]" pp_val v)) regs
+
+let pp_flags fmt regset =
+  let regs = Asm.[ZF; CF; PF; SF; OF] in
+  Format.fprintf fmt "@[<h>%a@]"
+    (Format.pp_print_list ~pp_sep:Format.pp_print_space
+      (fun fmt r ->
+        let v = regset (Asm.CR r) in
+        Format.fprintf fmt "[%a]" pp_val v)) regs
+
+let pp_regs fmt regset =
+  Format.fprintf fmt "@[<v>%a@,%a@]" pp_iregs regset pp_flags regset
 
 let _ =
   try
