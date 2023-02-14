@@ -14,7 +14,7 @@ open Printf
 open Commandline
 open Clflags
 open CommonOptions
-open Timing
+(* open Timing *)
 open Driveraux
 open Frontend
 open Assembler
@@ -398,6 +398,47 @@ let cmdline_actions =
       push_action process_h_file s; incr num_source_files; incr num_input_files);
   ]
 
+let cz_of_int z =
+  let rec pos_of_int i =
+    if i <= 1 then BinNums.Coq_xH
+    else
+      let p = pos_of_int (i/2) in
+      if i mod 2 = 0 then BinNums.Coq_xO p else BinNums.Coq_xI p
+  in
+  if z = 0 then BinNums.Z0
+  else if z < 0 then BinNums.Zneg (pos_of_int (-z))
+  else BinNums.Zpos (pos_of_int z)
+
+let int_of_cz z =
+  let rec int_of_pos i =
+    match i with
+    | BinNums.Coq_xH -> 1
+    | BinNums.Coq_xO i -> 2 * int_of_pos i
+    | BinNums.Coq_xI i -> 2 * int_of_pos i + 1
+  in
+  match z with
+  | BinNums.Z0 -> 0
+  | BinNums.Zneg p -> - int_of_pos p
+  | BinNums.Zpos p -> int_of_pos p
+
+let pp_val fmt v =
+  let open Values in
+  match v with
+  | Vundef -> Format.fprintf fmt "undef"
+  | Vint i -> Format.fprintf fmt "int: %d" (int_of_cz i)
+  | Vlong i -> Format.fprintf fmt "long: %d" (int_of_cz i)
+  | Vfloat _ -> Format.fprintf fmt "<float>"
+  | Vsingle _ -> Format.fprintf fmt "<float32>"
+  | Vptr _ -> Format.fprintf fmt "<vptr>"
+
+let pp_regs fmt regset =
+  let regs = Asm.[RAX; RBX; RCX; RDX; RSI; RDI; RBP; RSP; R8; R9; R10; R11; R12; R13; R14; R15] in
+  Format.fprintf fmt "@[<h>%a@]"
+    (Format.pp_print_list ~pp_sep:Format.pp_print_space
+      (fun fmt r ->
+        let v = regset (Asm.IR r) in
+        Format.fprintf fmt "[%a]" pp_val v)) regs
+
 let _ =
   try
     Gc.set { (Gc.get()) with
@@ -408,6 +449,17 @@ let _ =
     Frontend.init ();
     parse_cmdline cmdline_actions;
     DebugInit.init (); (* Initialize the debug functions *)
+    let o =
+      Exec_x86.exec_i
+        (List.map cz_of_int [0; 1; 2; 3; 4; 5; 6; 7; 8; 9; 10; 11; 12; 13; 14; 15])
+        Asm.(Pmov_rr (RAX, RBX))
+    in
+    match o with
+    | Asm.Next (regset, _) ->
+        Format.printf "%a@." pp_regs regset
+    | Asm.Stuck -> Format.printf "stuck!@."
+
+    (*
     if nolink () && !option_o <> None && !num_source_files >= 2 then
       fatal_error no_loc "ambiguous '-o' option (multiple source files)";
     if !num_input_files = 0 then
@@ -419,6 +471,7 @@ let _ =
       linker (output_filename_default "a.out") linker_args
     end;
     check_errors ()
+    *)
   with
   | Sys_error msg
   | CmdError msg -> error no_loc "%s" msg; exit 2
